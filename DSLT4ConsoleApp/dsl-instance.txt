@@ -1,0 +1,60 @@
+﻿
+# Example
+tag=Blogs
+singular-tag=Blog
+model=Blog
+# API usage
+restResourceIdProperty=BlogId
+restResourceIdPropertyType=int
+#
+baseQuery=
+(await ctx.Blogs
+.AsNoTracking()
+.Where(expr)
+.Select(b => new { Blog = b })
+{joins}
+{extraWhere}
+.OrderBy(a => a.Blog.BlogId)
+.Skip(skip) 
+.Take(top)
+.ToListAsync())
+#
+expansion=Posts
+IEnumerable<Post>
+.GroupJoin(ctx.Posts, a => a.Blog.NonKeyField, post => post.NonKeyField, {selector})
+
+# 
+expansion=Readers
+IEnumerable<Party>
+.GroupJoin(ctx.Parties.Where(r => r.Disposition == "reader"), a => a.Blog.NonKeyField, party => party.NonKeyField, {selector})
+
+# 
+expansion=Author
+Party
+.Join(ctx.Parties, a => a.Blog.NonKeyField, party => party.NonKeyField, {selector})
+.Where(p => p.Author.Disposition == "author")
+
+# Example
+tag=Posts
+singular-tag=Post
+model=Post
+# API usage
+restResourceIdProperty=PostId
+restResourceIdPropertyType=int
+#
+baseQuery=
+(await ctx.Posts
+.AsNoTracking()
+.Where(expr)
+.Select(p => new { Post = p })
+{joins}
+{extraWhere}
+.OrderBy(a => a.Post.PostId)
+.Skip(skip) 
+.Take(top)
+.ToListAsync())
+# 
+expansion=Readers
+IEnumerable<Party>
+.GroupJoin(ctx.Parties.Where(r => r.Disposition == "reader"), a => a.Post.NonKeyField, party => party.NonKeyField, {selector})
+

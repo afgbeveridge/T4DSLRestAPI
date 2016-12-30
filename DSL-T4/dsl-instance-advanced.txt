@@ -1,0 +1,53 @@
+﻿
+defaultQuery=
+(await ctx.[set]
+.AsNoTracking()
+.Where(expr)
+.Select(obj => new { [baseEntity] })
+{joins}
+{extraWhere}
+.OrderBy(a => [orderProperty])
+.Skip(skip) 
+.Take(top)
+.ToListAsync())
+#
+
+# Example
+tag=Blogs
+singular-tag=Blog
+model=Blog
+# API usage
+restResourceIdProperty=BlogId
+restResourceIdPropertyType=int
+#
+orderProperty=BlogId
+#
+expansion=Posts
+IEnumerable<Post>
+.GroupJoin(ctx.Posts, a => a.Blog.NonKeyField, post => post.NonKeyField, {selector})
+
+# 
+expansion=Readers
+IEnumerable<Party>
+.GroupJoin(ctx.Parties.Where(r => r.Disposition == "reader"), a => a.Blog.NonKeyField, party => party.NonKeyField, {selector})
+
+# 
+expansion=Author
+Party
+.Join(ctx.Parties, a => a.Blog.NonKeyField, party => party.NonKeyField, {selector})
+.Where(p => p.Author.Disposition == "author")
+
+# Example
+tag=Posts
+singular-tag=Post
+model=Post
+# API usage
+restResourceIdProperty=PostId
+restResourceIdPropertyType=int
+#
+orderProperty=PostId
+# 
+expansion=Readers
+IEnumerable<Party>
+.GroupJoin(ctx.Parties.Where(r => r.Disposition == "reader"), a => a.Post.NonKeyField, party => party.NonKeyField, {selector})
+

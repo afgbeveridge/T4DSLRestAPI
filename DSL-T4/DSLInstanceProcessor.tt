@@ -1,0 +1,148 @@
+﻿<#@ template debug="true" hostspecific="true" language="C#" #>
+<#@ output extension=".cs" #>
+<#@ include file="DSL-Common.ttinclude" #>
+
+<# if (!string.IsNullOrEmpty(exceptionMessage)) { #>
+	// Something went wrong
+	// Message(s)
+	<# exceptionMessage.Split(new [] { Environment.NewLine }, StringSplitOptions.None).ToList().ForEach(s => { #>
+	// <#= s #>
+	<# }); #>
+<# } #>
+<# else { #>
+
+ using System;
+ using System.Linq;
+ using System.Linq.Expressions;
+ using System.Collections.Generic;
+ using Microsoft.EntityFrameworkCore;
+ using System.Threading.Tasks;
+ using System.Reflection;
+ using System.Dynamic;
+ <# includeNamespaces.ForEach(ns => { #>
+ using <#= ns #>;
+ <# }); #>
+
+ namespace <#= baseNamespace #> {
+
+    public abstract class BaseQueryHandling {
+
+        protected const string NameSeparator = "<#= processor.NameSeparator #>";
+
+        protected async Task<IEnumerable<TResult>> GetMultipleObjectsWithExpansion<TResult, TEntity>(<#= contextType #> ctx, Expression<Func<TEntity, bool>> expr, IEnumerable<string> expansions, int top, int skip) {
+			var expand = expansions ?? Enumerable.Empty<string>();
+			<# if (checkExpansions) { #>
+// .NET Core does not supply the ToTitleCase behaviour, hence this
+			<# if (expansionsAreTitleCased) #>
+expand = expand.Select(e => e.Substring(0, 1).ToUpper() + e.Substring(1).ToLower());
+            if (!expand.All(SupportedExpansions.Contains))
+                throw new Exception("Unknown expansion(s) supplied: " + string.Join(",", expand.Except(SupportedExpansions)));
+			<# } #>
+var name = "<#= processor.MethodNameStart #>" + NameSeparator + TagName +
+                        (expand.Any() ? NameSeparator : string.Empty) + string.Join(NameSeparator, expand.OrderBy(s => s));
+            return await ((Task<IEnumerable<TResult>>)
+                        GetType()
+                        .GetMethod(name, BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance)
+                        .Invoke(this, new object[] { ctx, (expr ?? (entity => true)), Math.Max(1, top), Math.Max(0, skip) }));
+        }
+
+        protected async Task<TResult> GetSingleObjectWithExpansion<TResult, TEntity>(<#= contextType #> ctx, Expression<Func<TEntity, bool>> expr, IEnumerable<string> expansions) {
+            return (await GetMultipleObjectsWithExpansion<TResult, TEntity>(ctx, expr, expansions, int.MaxValue, 0)).FirstOrDefault();
+        }
+
+		protected abstract string TagName { get; }
+
+		public abstract IEnumerable<string> SupportedExpansions { get; }
+
+    }
+
+	internal static class ResultClassHelper { 
+		
+		internal static IEnumerable<dynamic> Amalgamate<TResult>(IEnumerable<TResult> results, string modelName) { 
+			return results.Select(r => Amalgamate(r, modelName)).ToArray();
+		}
+
+		internal static dynamic Amalgamate(object result, string modelName) {
+			dynamic origin = new ExpandoObject();
+			IDictionary<string, object> res = origin as IDictionary<string, object>;
+			// Get the root property
+			var root = result.GetType().GetProperty(modelName).GetValue(result);
+			root.GetType().GetProperties().ToList().ForEach(p => res[p.Name] = p.GetValue(root));
+			result.GetType().GetProperties().Where(p => p.Name != modelName).ToList().ForEach(p => res[p.Name] = p.GetValue(result));
+			return origin;
+		}
+	}
+}
+
+<# 
+	processor.AllDefinitions.ForEach(def => { 
+	var acceptSignature = new List<string> { def.Model + " " + def.Singular.ToLower() };
+	var assignments = new List<string>();  
+#>
+#region <#= def.Tag #>
+
+ namespace <#= baseNamespace #>.<#= def.Tag #> { 
+
+ public class <#= def.ResultClass #> : <#= def.Model #> { 
+	<# def.OrderedExpansions.ToList().ForEach(expandName => { 
+		var curExpansion = def.RawExpansions[expandName];
+		acceptSignature.Add(curExpansion.Type + " " + expandName.ToLower() + " = null");
+		assignments.Add("result." + expandName + " = " + expandName.ToLower() + ";");
+	#>
+	public <#= curExpansion.Type #> <#= expandName #> { get; set; }
+	<# }); 	
+	#>
+	
+	public static <#= def.ResultClass #> Accept(<#= string.Join(",", acceptSignature) #>) { 
+		var result = new <#= def.ResultClass #>();
+		// Now some simple code to copy properties of the inbound model class to the result class
+		typeof(<#= def.Model #>).GetProperties().Where(info => info.CanWrite)
+                    .ToList().ForEach(inf => typeof(<#= def.ResultClass #>).GetProperty(inf.Name).SetValue(result, inf.GetValue(<#= def.Singular.ToLower() #>)));
+		<#= String.Join(Environment.NewLine, assignments) #>
+		return result;
+	}
+
+ }
+
+ 
+ public partial class <#= def.Tag #>QueryHandler : BaseQueryHandling { 
+
+	protected override string TagName { get; } = "<#= def.Tag #>";
+
+	<# def.RawExpansions.Keys.ToList().ForEach(expandName => { #>
+public const string Expand<#= expandName #> = "<#= expandName #>";
+	<# }); #>
+
+	public override IEnumerable<string> SupportedExpansions { get; } = new [] { <#= string.Join(", ", def.RawExpansions.Keys.ToArray().Select(k => "\"" + k + "\"")) #>};
+
+	<# def.Implementations.ForEach(impl => { #>
+
+	private async Task<IEnumerable<<#= def.ResultClass #>>> <#= impl.Name #>(<#= contextType #> ctx, Expression<Func<<#= def.Model #>, bool>> expr, int top, int skip) { 
+		return 
+<#= impl.Query #>
+	}
+
+<# }); // end each impl #>
+
+	public async Task<IEnumerable<<#= def.ResultClass #>>> <#= processor.MethodNameStart #><#= def.Tag #>WithExpansion(<#= contextType #> ctx, Expression<Func<<#= def.Model #>, bool>> expr = null, int top = <#= defaultTop #>, int skip = <#= defaultSkip #>, IEnumerable<string> expansions = null) { 
+		return await GetMultipleObjectsWithExpansion<<#= def.ResultClass #>, <#= def.Model #>>(ctx, expr, expansions, top, skip);
+	}
+
+	public async Task<<#= def.ResultClass #>> <#= processor.MethodNameStart #><#= def.Singular #>WithExpansion(<#= contextType #> ctx, Expression<Func<<#= def.Model #>, bool>> expr, IEnumerable<string> expansions = null) { 
+	    return await GetSingleObjectWithExpansion<<#= def.ResultClass #>, <#= def.Model #>>(ctx, expr, expansions);
+	}
+}
+
+ }
+ #endregion
+
+<# }); //end DSLObject processing #>
+//
+// Source DSL
+// This is the content of the DSL type file that generated the above code
+//
+<# processor.DSLContent.ToList().ForEach(line => { #>
+// <#= line #>
+<# }); #>
+
+<# } // End else for exception handling - horrible position #>

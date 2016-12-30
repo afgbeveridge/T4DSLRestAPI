@@ -1,0 +1,128 @@
+﻿<#@ template debug="true" hostspecific="true" language="C#" #>
+<#@ output extension=".cs" #>
+<#@ include file="DSL-Common.ttinclude" #>
+
+<# if (!string.IsNullOrEmpty(exceptionMessage)) { #>
+	// Something went wrong
+	// Message(s)
+	<# exceptionMessage.Split(new [] { Environment.NewLine }, StringSplitOptions.None).ToList().ForEach(s => { #>
+	// <#= s #>
+	<# }); #>
+<# } #>
+<# else { #>
+
+using System;
+using Microsoft.AspNetCore.Mvc;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+using System.Net;
+using DSLT4Support;
+using System.Linq.Expressions;
+<# includeNamespaces.ForEach(ns => { #>
+using <#= ns #>;
+<# }); #>
+
+ namespace <#= baseNamespace #> {
+
+   	public class BaseController<THandler> : Controller where THandler : new() {
+
+		protected const int DefaultTop = 10;
+		protected const int DefaultSkip = 0;
+
+		/// <summary>
+        /// Public constructor that is injected with a context instance
+        /// </summary>
+        /// <param name="ctx">an EF context</param>
+        public BaseController(<#= contextType #> ctx) {
+            Context = ctx;
+        }
+
+		protected <#= contextType #> Context { get; private set; }
+
+		protected THandler Handler() { 
+			return new THandler();
+		}
+
+		protected Expression<Func<TEntity, bool>> CreatePredicate<TEntity>(object id, string propertyName) { 
+			ParameterExpression p = Expression.Parameter(typeof(TEntity), "obj");
+			MemberExpression m = Expression.Property(p, propertyName);
+			ConstantExpression constant = Expression.Constant(id, id.GetType());
+			BinaryExpression body = Expression.Equal(m, constant);
+			return Expression.Lambda<Func<TEntity, bool>>(body, new[] { p });
+		}
+
+		// This is included to allow for a simple 'one place' replacement of the IActionResult that is returned
+		protected IActionResult FormResult(object data) { 
+			return new ObjectResult(data);
+		}
+
+	}
+}
+
+<# 
+	processor.AllDefinitions.Where(def => def.ApiAware).ToList().ForEach(def => { 
+#>
+#region <#= def.Tag #>
+
+ namespace <#= baseNamespace #>.<#= def.Tag #> { 
+
+    [Route("api/[controller]")]
+    public class <#= def.Tag #>Controller : BaseController<<#= def.Tag #>QueryHandler> {
+
+        /// <summary>
+        /// Public constructor that is injected with a context instance
+        /// </summary>
+        /// <param name="ctx">an EF context</param>
+        public <#= def.Tag #>Controller(<#= contextType #> ctx) : base(ctx) {
+        }
+
+		[Produces(typeof(IEnumerable<<#= def.ResultClass #>>))]
+        [ProducesResponseType(typeof(void), (int) HttpStatusCode.NoContent)]
+        [ProducesResponseType(typeof(void), (int) HttpStatusCode.InternalServerError)]
+        [HttpGet]
+        public async Task<IActionResult> Get<#= def.Tag #>Async([FromQuery] int? top, [FromQuery] int? skip, [FromQuery] string expansions) {
+            var results = await Handler().Get<#= def.Tag #>WithExpansion(Context, null, top ?? DefaultTop, skip ?? DefaultSkip, expansions.ExplodeExpansion());
+            return FormResult(results);
+        }
+
+		[Produces(typeof(<#= def.ResultClass #>))]
+        [ProducesResponseType(typeof(void), (int) HttpStatusCode.NoContent)]
+		[ProducesResponseType(typeof(void), (int) HttpStatusCode.NotFound)]
+        [ProducesResponseType(typeof(void), (int) HttpStatusCode.InternalServerError)]
+        [HttpGet("{id}")]
+        public async Task<IActionResult> Get<#= def.Singular #>Async(<#= def.QueryDetails.RestResourceIdPropertyType #> id, [FromQuery] string expansions) {
+            return FormResult(await Get<#= def.Singular #>(id, expansions));
+        }
+
+		<# def.RawExpansions.Keys.ToList().ForEach(expandName => { #>
+		
+		[Produces(typeof(<#= def.RawExpansions[expandName].Type #>))]
+        [ProducesResponseType(typeof(void), (int) HttpStatusCode.NoContent)]
+		[ProducesResponseType(typeof(void), (int) HttpStatusCode.NotFound)]
+        [ProducesResponseType(typeof(void), (int) HttpStatusCode.InternalServerError)]
+        [HttpGet("{id}/<#= expandName #>")]
+		public async Task<IActionResult> Get<#= expandName #>Async(int id) {
+			return FormResult((await Get<#= def.Singular #>(id, "<#= expandName #>")).<#= expandName #>);
+		}
+
+		<# }); #>
+
+		private async Task<<#= def.ResultClass #>> Get<#= def.Singular #>(<#= def.QueryDetails.RestResourceIdPropertyType #> id, string expansions) { 
+			var predicate = CreatePredicate<<#= def.Singular #>>(id, "<#= def.QueryDetails.RestResourceIdProperty #>");
+            return await Handler().Get<#= def.Singular #>WithExpansion(Context, predicate, expansions.ExplodeExpansion());
+		}
+
+	}
+ }
+ #endregion
+
+<# }); //end DSLObject processing #>
+//
+// Source DSL
+// This is the content of the DSL type file that generated the above code
+//
+<# processor.DSLContent.ToList().ForEach(line => { #>
+// <#= line #>
+<# }); #>
+
+<# } // End else for exception handling - horrible position #>

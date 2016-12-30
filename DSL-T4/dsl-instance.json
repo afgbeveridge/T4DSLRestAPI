@@ -1,0 +1,46 @@
+﻿{
+  "context": { },
+  "allDefinitions": [
+    {
+      "tag": "Blogs",
+      "singular": "Blog",
+      "model": "Blog",
+      "queryDetails": {
+        "query": "(await ctx.Blogs\r\n.AsNoTracking()\r\n.Where(expr)\r\n.Select(b => new { Blog = b })\r\n{joins}\r\n{extraWhere}\r\n.OrderBy(a => a.Blog.BlogId)\r\n.Skip(skip)\r\n.Take(top)\r\n.ToListAsync())",
+        "restResourceIdProperty": "BlogId",
+        "restResourceIdPropertyType": "int"
+      },
+      "rawExpansions": {
+        "Posts": {
+          "type": "IEnumerable<Post>",
+          "join": ".GroupJoin(ctx.Posts, a => a.Blog.NonKeyField, post => post.NonKeyField, {selector})"
+        },
+        "Author": {
+          "type": "Party",
+          "join": ".Join(ctx.Parties, a => a.Blog.NonKeyField, party => party.NonKeyField, {selector})",
+          "predicate": ".Where(p => p.Author.Disposition == \"author\")"
+        },
+        "Readers": {
+          "type": "IEnumerable<Party>",
+          "join": ".GroupJoin(ctx.Parties.Where(r => r.Disposition == \"reader\"), a => a.Blog.NonKeyField, party => party.NonKeyField, {selector})"
+        }
+      }
+    },
+    {
+      "tag": "Posts",
+      "singular": "Post",
+      "model": "Post",
+      "queryDetails": {
+        "query": "(await ctx.Posts\r\n.AsNoTracking()\r\n.Where(expr)\r\n.Select(p => new { Post = p })\r\n{joins}\r\n{extraWhere}\r\n.OrderBy(a => a.Post.PostId)\r\n.Skip(skip)\r\n.Take(top)\r\n.ToListAsync())",
+        "restResourceIdProperty": "PostId",
+        "restResourceIdPropertyType": "int"
+      },
+      "rawExpansions": {
+        "Readers": {
+          "type": "IEnumerable<Party>",
+          "join": ".GroupJoin(ctx.Parties.Where(r => r.Disposition == \"reader\"), a => a.Post.NonKeyField, party => party.NonKeyField, {selector})"
+        }
+      }
+    }
+  ]
+}
