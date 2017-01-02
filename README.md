@@ -116,10 +116,10 @@ An example fully specified entry using the 'baseQuery' configuration:
 ```tag=Blogs
 singular-tag=Blog
 model=Blog
-\# API usage
+# API usage
 restResourceIdProperty=BlogId
 restResourceIdPropertyType=int
-\#
+#
 baseQuery=
 (await ctx.Blogs
 .AsNoTracking()
@@ -131,17 +131,17 @@ baseQuery=
 .Skip(skip) 
 .Take(top)
 .ToListAsync())
-\#
+#
 expansion=Posts
 IEnumerable<Post>
 .GroupJoin(ctx.Posts, a => a.Blog.NonKeyField, post => post.NonKeyField, {selector})
 
-\#
+#
 expansion=Readers
 IEnumerable<Party>
 .GroupJoin(ctx.Parties.Where(r => r.Disposition == "reader"), a => a.Blog.NonKeyField, party => party.NonKeyField, {selector})
 
-\#
+#
 expansion=Author
 Party
 .Join(ctx.Parties, a => a.Blog.NonKeyField, party => party.NonKeyField, {selector})
@@ -168,22 +168,22 @@ And a possible fully specified resource definition, noting that the specificatio
 ```tag=Blogs
 singular-tag=Blog
 model=Blog
-\# API usage
+# API usage
 restResourceIdProperty=BlogId
 restResourceIdPropertyType=int
-\#
+#
 orderProperty=BlogId
-\#
+#
 expansion=Posts
 IEnumerable<Post>
 .GroupJoin(ctx.Posts, a => a.Blog.NonKeyField, post => post.NonKeyField, {selector})
 
-\#
+#
 expansion=Readers
 IEnumerable<Party>
 .GroupJoin(ctx.Parties.Where(r => r.Disposition == "reader"), a => a.Blog.NonKeyField, party => party.NonKeyField, {selector})
 
-\#
+#
 expansion=Author
 Party
 .Join(ctx.Parties, a => a.Blog.NonKeyField, party => party.NonKeyField, {selector})
